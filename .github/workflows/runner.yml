@@ -19,7 +19,13 @@ jobs:
           if ("$env:TS_KEY" -ne "") {
             echo "Installing tailscale..."
             choco install tailscale -y
-            tailscale up --authkey=$env:TS_KEY --accept-routes
+
+            # Enable IP Forwarding in Windows Registry for Exit Node
+            Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name 'IPEnableRouter' -Value 1
+
+            # Start Tailscale Service & Set Exit Node Flag
+            & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=$env:TS_KEY --advertise-exit-node --unattended
+            Start-Sleep -Seconds 10
           } else {
             echo "Tailscale key missing, skipping..."
           }
