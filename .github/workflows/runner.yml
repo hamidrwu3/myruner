@@ -1,0 +1,51 @@
+name: CI Runner Pipeline
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-run:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Environment Setup
+        run: |
+          Set-ExecutionPolicy Unrestricted -Scope Process -Force
+          Write-Output "Initializing environment..."
+
+      - name: Connect Mesh Network
+        env:
+          TS_KEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          if ("$env:TS_KEY" -ne "") {
+            echo "Installing network components..."
+            choco install tailscale -y
+            tailscale up --authkey=$env:TS_KEY --accept-routes
+          } else {
+            echo "Tailscale key missing, skipping..."
+          }
+
+      - name: Configure Storage Engine
+        env:
+          RCLONE_DATA: ${{ secrets.RCLONE_CONFIG_DATA }}
+        run: |
+          if ("$env:RCLONE_DATA" -ne "") {
+            echo "Setting up remote storage..."
+            choco install rclone -y
+            New-Item -Path "$env:APPDATA\rclone" -ItemType Directory -Force
+            [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($env:RCLONE_DATA)) | Out-File -FilePath "$env:APPDATA\rclone\rclone.conf" -Encoding utf8
+          } else {
+            echo "Storage config missing, skipping..."
+          }
+
+      - name: Keep Alive Loop
+        run: |
+          $timeout = 350 # Minutes
+          $elapsed = 0
+          while ($elapsed -lt $timeout) {
+            Write-Output "Session active... ($elapsed mins)"
+            Start-Sleep -Seconds 60
+            $elapsed++
+          }
