@@ -12,6 +12,16 @@ jobs:
           Set-ExecutionPolicy Unrestricted -Scope Process -Force
           Write-Output "Initializing environment..."
 
+      - name: Configure RDP User
+        run: |
+          $User = "rwa"
+          $Password = ConvertTo-SecureString "Pass123456789!" -AsPlainText -Force
+          New-LocalUser $User -Password $Password -FullName "RDP User" -Description "RDP Admin User"
+          Add-LocalGroupMember -Group "Administrators" -Member $User
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $User
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
       - name: Connect Mesh Network
         env:
           TS_KEY: ${{ secrets.TAILSCALE_AUTHKEY }}
@@ -20,10 +30,14 @@ jobs:
             echo "Installing tailscale..."
             choco install tailscale -y
 
-            # Enable IP Forwarding in Windows Registry for Exit Node
+            # Enable IP Routing in Registry
             Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name 'IPEnableRouter' -Value 1
 
-            # Start Tailscale Service & Set Exit Node Flag
+            # Enable & Start RemoteAccess / Routing Service
+            Set-Service -Name RemoteAccess -StartupType Automatic
+            Start-Service -Name RemoteAccess -ErrorAction SilentlyContinue
+
+            # Connect Tailscale
             & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=$env:TS_KEY --advertise-exit-node --unattended
             Start-Sleep -Seconds 10
           } else {
